@@ -11,7 +11,7 @@ def convert_single_prolong_dataset(
     dataset_name: str,
     original_model: str,
     qwen_model: str,
-    max_length: int = 1024*16
+    max_length: int = 65536
 ):
     """处理单个数据集目录"""
     print(f"\n📂 Processing dataset: {dataset_name}")
@@ -56,13 +56,18 @@ def convert_single_prolong_dataset(
         return
 
     # Step 2: 用 Qwen tokenizer 编码
-    print("  Step 2/4: Tokenizing with Qwen...")
+    print("  Step 2/4: Tokenizing with Qwen (batch)...")
     qwen_tokenizer = AutoTokenizer.from_pretrained(qwen_model)
-    
-    tokenized_samples = []
     try:
-        for text in tqdm(text_samples, desc="Tokenizing", unit="sample", leave=False):
-            tokenized_samples.append(qwen_tokenizer.encode(text, add_special_tokens=True))
+        tokenized = qwen_tokenizer.batch_encode_plus(
+            text_samples,
+            add_special_tokens=True,
+            return_attention_mask=False,
+            return_token_type_ids=False,
+            padding=False,
+            truncation=False
+        )
+        tokenized_samples = tokenized["input_ids"]
     except Exception as e:
         print(f"❌ Tokenization failed for {dataset_name}: {str(e)}")
         return
@@ -92,17 +97,17 @@ def convert_single_prolong_dataset(
     print("  Step 4/4: Packing data blocks...")
     packed_blocks = []
     current_block = []
-    
     try:
         for tokens in tqdm(tokenized_samples, desc="Packing", unit="sample", leave=False):
-            while len(tokens) > 0:
+            idx = 0
+            while idx < len(tokens):
                 remaining = max_length - len(current_block)
-                if remaining <= 0:
+                take = min(remaining, len(tokens) - idx)
+                current_block.extend(tokens[idx:idx+take])
+                idx += take
+                if len(current_block) == max_length:
                     packed_blocks.append(current_block)
                     current_block = []
-                    remaining = max_length
-                current_block.extend(tokens[:remaining])
-                tokens = tokens[remaining:]
         if current_block:
             packed_blocks.append(current_block)
     except Exception as e:
@@ -131,9 +136,9 @@ def convert_single_prolong_dataset(
 def convert_prolong_data(
     input_path: str,
     output_base_dir: str,
-    original_model: str = "princeton-nlp/Llama-3-8B-ProLong-64k-Base",
-    qwen_model: str = "Qwen/Qwen2.5-1.5B",
-    max_length: int = 1024*16
+    original_model: str = "./Llama-3-8B-ProLong-64k-Base",
+    qwen_model: str = "./Qwen2.5-1.5B",
+    max_length: int = 65536
 ):
     """智能处理 ProLong 数据，自动检测单数据集或多数据集模式"""
     print(f"🚀 Starting conversion for: {input_path}")
@@ -161,9 +166,11 @@ def convert_prolong_data(
         # 多数据集模式：输入目录包含多个子数据集
         print("🔍 Detected multi-dataset mode")
         
-        # 获取所有子目录（每个都是一个数据集）
         all_datasets = [d for d in os.listdir(input_path) 
                       if os.path.isdir(os.path.join(input_path, d))]
+        # 过滤已完成的数据集
+        finished = {"arxiv", "dolmawiki", "openwebmath", "tuluv2"}
+        all_datasets = [d for d in all_datasets if d not in finished]
         
         print(f"Found {len(all_datasets)} datasets to process:")
         for i, dataset in enumerate(all_datasets, 1):
@@ -194,6 +201,6 @@ if __name__ == "__main__":
     
     # 情况2：处理包含多个数据集的目录（子目录各含index.json）
     convert_prolong_data(
-        input_path="/hpc2hdd/home/qxiao183/SLM/PLM/plm_long/ProLong/datasets/long-context-65536",
-        output_base_dir="/hpc2hdd/home/qxiao183/linweiquan/llm_train/prolong/datasets"
+        input_path="/data/user/qxiao183/lwq_llm/ProLong-main/datasets/long-context-65536",
+        output_base_dir="/data/user/qxiao183/lwq_llm/ProLong-main/datasets/plm-long-context-65536"
     )

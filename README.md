@@ -213,7 +213,7 @@ Please email Tianyu (`tianyug@princeton.edu`) or Alex (`awettig@princeton.edu`) 
 
 ## Support PLM-1.8B training
 1. hf link：https://huggingface.co/PLM-Team/PLM-1.8B-Instruct
-2. 运行convert_dataset_fast进行数据转换
+2. 运行convert_dataset.py进行数据转换
 3. 训练脚本中记得修改模型文件路径。
 4. 修改training/train_language_model.py关于token、model以及config的配置。
 5. 修改training/trainer.py的compute_loss函数，过滤掉训练数据中的seq_length。
